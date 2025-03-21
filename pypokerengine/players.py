@@ -1,3 +1,4 @@
+import random
 class BasePokerPlayer(object):
   """Base Poker client implementation
 
@@ -16,8 +17,16 @@ class BasePokerPlayer(object):
     pass
 
   def declare_action(self, valid_actions, hole_card, round_state):
-    err_msg = self.__build_err_msg("declare_action")
-    raise NotImplementedError(err_msg)
+    print(round_state)
+    r = random.random()
+    if r <= 0.5:
+      call_action_info = valid_actions[1]
+    elif r<= 0.9 and len(valid_actions ) == 3:
+      call_action_info = valid_actions[2]
+    else:
+      call_action_info = valid_actions[0]
+    action = call_action_info["action"]
+    return action  # action returned here is sent to the poker engine
 
   def receive_game_start_message(self, game_info):
     err_msg = self.__build_err_msg("receive_game_start_message")

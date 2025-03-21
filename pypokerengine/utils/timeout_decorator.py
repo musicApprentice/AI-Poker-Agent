@@ -8,6 +8,7 @@ Timeout decorator.
 from __future__ import print_function
 from __future__ import unicode_literals
 from __future__ import division
+import threading
 
 import sys
 import time
@@ -62,14 +63,33 @@ def timeout(seconds=None, use_signals=True, timeout_exception=TimeoutError, exce
     It is illegal to pass anything other than a function as the first
     parameter. The function is wrapped and returned to the caller.
     """
+    """Add a timeout parameter to a function and return it."""
     def decorate(function):
-
         if not seconds:
             return function
 
-        if use_signals:
+        if sys.platform == "win32":
+            @wraps(function)
+            def new_function(*args, **kwargs):
+                result = [None]  # Use list to store return value
+
+                def target():
+                    result[0] = function(*args, **kwargs)
+
+                thread = threading.Thread(target=target)
+                thread.start()
+                thread.join(seconds)
+
+                if thread.is_alive():
+                    raise TimeoutError(exception_message or "Function timed out")
+
+                return result[0]
+
+            return new_function
+        
+        else:
             def handler(signum, frame):
-                _raise_exception(timeout_exception, exception_message)
+                raise TimeoutError(exception_message or "Function timed out")
 
             @wraps(function)
             def new_function(*args, **kwargs):
@@ -83,49 +103,65 @@ def timeout(seconds=None, use_signals=True, timeout_exception=TimeoutError, exce
                     if new_seconds:
                         signal.setitimer(signal.ITIMER_REAL, 0)
                         signal.signal(signal.SIGALRM, old)
-            return new_function
-        else:
-            @wraps(function)
-            def new_function(*args, **kwargs):
-                timeout_wrapper = _Timeout(function, timeout_exception, exception_message, seconds)
-                return timeout_wrapper(*args, **kwargs)
+
             return new_function
 
     return decorate
 
-def timeout2(seconds=None, defaultretval="Blah",exception_message="[EXP]: Action TimedOut",timeout_exception=TimeoutError):
+def timeout2(seconds=None, defaultretval="Blah", exception_message="[EXP]: Action TimedOut", timeout_exception=TimeoutError):
     """
-        Similar as before return a default value instead.
-        Uses Signals. Can you use multiprocessing instead.
+        Similar to timeout, but returns a default value instead.
+        Uses threading.Timer on Windows instead of signal.SIGALRM.
     """
     def decorate(function):
 
         if not seconds:
             return function
 
-        
-        def handler(signum, frame):
-            _raise_exception(timeout_exception, exception_message)
-            #print("[EXP] : TimedOut, Returning Default Value (Fold)")
-            # print(defaultretval)
-            #return defaultretval
-        @wraps(function)
-        def new_function(*args, **kwargs):
-            new_seconds = kwargs.pop('timeout', seconds)
-            if new_seconds:
-                # print("[EXP] : No-TimeOut")
-                old = signal.signal(signal.SIGALRM, handler)
-                signal.setitimer(signal.ITIMER_REAL, new_seconds)
-            try:
-                return function(*args, **kwargs)
-            except TimeoutError :
-                print(exception_message)
-                return defaultretval
-            finally:
+        if sys.platform == "win32":
+            @wraps(function)
+            def new_function(*args, **kwargs):
+                result = [defaultretval]  # Default value in case of timeout
+
+                def target():
+                    try:
+                        result[0] = function(*args, **kwargs)
+                    except TimeoutError:
+                        print(exception_message)
+
+                thread = threading.Thread(target=target)
+                thread.start()
+                thread.join(seconds)
+
+                if thread.is_alive():
+                    print(exception_message)
+                    return defaultretval  # Return default value on timeout
+
+                return result[0]
+
+            return new_function
+
+        else:  # Use SIGALRM on Unix/Linux
+            def handler(signum, frame):
+                raise timeout_exception(exception_message)
+
+            @wraps(function)
+            def new_function(*args, **kwargs):
+                new_seconds = kwargs.pop('timeout', seconds)
                 if new_seconds:
-                    signal.setitimer(signal.ITIMER_REAL, 0)
-                    signal.signal(signal.SIGALRM, old)
-        return new_function
+                    old = signal.signal(signal.SIGALRM, handler)
+                    signal.setitimer(signal.ITIMER_REAL, new_seconds)
+                try:
+                    return function(*args, **kwargs)
+                except TimeoutError:
+                    print(exception_message)
+                    return defaultretval
+                finally:
+                    if new_seconds:
+                        signal.setitimer(signal.ITIMER_REAL, 0)
+                        signal.signal(signal.SIGALRM, old)
+
+            return new_function
 
     return decorate
 
