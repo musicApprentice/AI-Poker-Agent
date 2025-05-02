@@ -14,12 +14,12 @@ class QLearningPokerAgent:
         self.hand_strength_counts = defaultdict(int)
         self.behavior_counts = defaultdict(int)
         self.pot_bucket_counts = defaultdict(int)
-
+        
         self.raise_ratios = []
         self.call_ratios = []
 
     def evaluate_hand_strength(self, hole_card):
-        print("Hole card", hole_card)
+        # print("Hole card", hole_card)
 
         if len(hole_card) < 2:
             self.hand_strength_counts["weak"] += 1
@@ -44,33 +44,33 @@ class QLearningPokerAgent:
 
         # STRONG: any pair, A-x suited, AK/AQ, Broadway suited
         if is_pair:
-            print("Hand: Strong (Pair)")
+            # print("Hand: Strong (Pair)")
             self.hand_strength_counts["strong"] += 1
             return "strong"
         if (r1 == 'A' and val2 >= 9) or (is_suited and r1 == 'A'):
-            print("Hand: Strong (A-x or suited A)")
+            # print("Hand: Strong (A-x or suited A)")
             self.hand_strength_counts["strong"] += 1
             return "strong"
         if (r1, r2) in [('A', 'K'), ('A', 'Q'), ('K', 'Q'), ('K', 'J'), ('Q', 'J')] or (is_suited and val1 >= 11 and val2 >= 10):
-            print("Hand: Strong (Broadway combo)")
+            # print("Hand: Strong (Broadway combo)")
             self.hand_strength_counts["strong"] += 1
             return "strong"
 
         # MEDIUM: suited connectors like J-T, 9-8; high kicker A-x or K-x; offsuited broadways
         if is_suited and diff == 1 and val1 >= 6:
-            print("Hand: Medium (Suited connector)")
+            # print("Hand: Medium (Suited connector)")
             self.hand_strength_counts["medium"] += 1
             return "medium"
         if diff == 1 and val1 >= 10:
-            print("Hand: Medium (Offsuit connector)")
+            # print("Hand: Medium (Offsuit connector)")
             self.hand_strength_counts["medium"] += 1
             return "medium"
         if r1 == 'A' or r2 == 'A' or r1 == 'K' or r2 == 'K':
-            print("Hand: Medium (High kicker)")
+            # print("Hand: Medium (High kicker)")
             self.hand_strength_counts["medium"] += 1
             return "medium"
 
-        print("Hand: Weak")
+        # print("Hand: Weak")
         self.hand_strength_counts["weak"] += 1
         return "weak"
 
@@ -87,19 +87,19 @@ class QLearningPokerAgent:
 
         if relative_pot < 2:
             pot_bucket = "very_small"
-            print("very small bucket")
+            # print("very small bucket")
         elif relative_pot < 4:
             pot_bucket = "small"
-            print("small bucket")
+            # print("small bucket")
         elif relative_pot < 8:
             pot_bucket = "medium"
-            print("medium bucket")
+            # print("medium bucket")
         elif relative_pot < 16:
             pot_bucket = "large"
-            print("large bucket")
+            # print("large bucket")
         else:
             pot_bucket = "very_large"
-            print("very large bucket")
+            # print("very large bucket")
 
 
         self.pot_bucket_counts[pot_bucket] += 1
@@ -125,23 +125,23 @@ class QLearningPokerAgent:
 
         # New, more realistic thresholds
         if raise_ratio > 0.6:
-            print("Behavior: Maniac")
+            # print("Behavior: Maniac")
             self.behavior_counts["maniac"] += 1
             return "maniac"
         elif call_ratio > 0.55 and raise_ratio < 0.3:
-            print("Behavior: Calling station")
+            # print("Behavior: Calling station")
             self.behavior_counts["calling_station"] += 1
             return "calling_station"
         elif abs(raise_ratio - call_ratio) < 0.2:
-            print("Behavior: Balanced")
+            # print("Behavior: Balanced")
             self.behavior_counts["balanced"] += 1
             return "balanced"
         elif raise_ratio > call_ratio:
-            print("Behavior: Aggressive")
+            # print("Behavior: Aggressive")
             self.behavior_counts["aggressive"] += 1
             return "aggressive"
         else:
-            print("Behavior: Tight")
+            # print("Behavior: Tight")
             self.behavior_counts["tight"] += 1
             return "tight"
 

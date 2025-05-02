@@ -1,79 +1,173 @@
 from pypokerengine.api.game import setup_config, start_poker
 from randomplayer import RandomPlayer
+from allin_player import AllInPlayer
 from qlearning_player import QLearningPlayer
 import pickle
 import csv
+import os
+import random
+import json
 
-# Modified from 
+QTABLE_PATH = "q_table_agent.pkl"
+CSV_PATH = "training_progress.csv"
+JSONL_LOG_PATH = "game_log.jsonl"
+SAVE_INTERVAL = 10
+
+def read_last_game_index():
+    if not os.path.exists(JSONL_LOG_PATH):
+        return 0
+    with open(JSONL_LOG_PATH, "r") as f:
+        lines = f.readlines()
+        if not lines:
+            return 0
+        try:
+            last_entry = json.loads(lines[-1])
+            return last_entry["game_id"]
+        except (json.JSONDecodeError, KeyError):
+            return 0
+
 def train_q_agent():
-    num_game = 25
+    num_new_games = 500
     max_round = 100
     initial_stack = 10000
     small_blind_amount = 20
 
-    agent = QLearningPlayer()
-    opponent = RandomPlayer()
+    agent = QLearningPlayer(trainable=True, fold_weak_prob=0, fold_medium_prob=0)
 
-    config = setup_config(max_round=max_round, initial_stack=initial_stack, small_blind_amount=small_blind_amount)
-    config.register_player(name="f1", algorithm=agent)
-    config.register_player(name="f2", algorithm=opponent)
+    if os.path.exists(QTABLE_PATH):
+        with open(QTABLE_PATH, "rb") as f:
+            agent.agent.q_table = pickle.load(f)
+        print("[Resume] Loaded Q-table from previous run.")
 
-    agent_wins = 0
-    opponent_wins = 0
+    last_game_id = read_last_game_index()
 
-    # Create CSV file for logging win rate
-    with open("training_progress.csv", mode="w", newline="") as file:
+    write_header = not os.path.exists(CSV_PATH)
+    with open(CSV_PATH, mode="a", newline="") as file:
         writer = csv.writer(file)
-        writer.writerow(["Game", "Agent Wins", "Opponent Wins", "Win Rate (%)"])
+        if write_header:
+            writer.writerow(["Game ID", "Agent Wins", "Opponent Wins", "Win Rate (%)", "Reward", "Opponent", "Result"])
 
-        for game in range(num_game):
-            print(f"Training game {game+1}/{num_game}")
+        agent_wins = opponent_wins = 0
+        random_wins = allin_wins = random_losses = allin_losses = 0
+
+        for i in range(num_new_games):
+            game_id = last_game_id + i + 1
+            print(f"\n=== Game {game_id} ===")
+            if (game_id // 10) % 2 == 0:
+                opponent = AllInPlayer()
+                opponent_type = "AllInPlayer"
+            else:
+                opponent = AllInPlayer()
+                opponent_type = "AllInPlayer"
+
+            config = setup_config(max_round=max_round, initial_stack=initial_stack, small_blind_amount=small_blind_amount)
+            config.register_player(name="f1", algorithm=agent)
+            config.register_player(name="f2", algorithm=opponent)
+
+            hole_card = None  # We'll extract this only from round_start_message if needed
             result = start_poker(config, verbose=0)
-
-            # Find out who won this game
             winner = max(result["players"], key=lambda p: p["stack"])
+
+            reward = 0
+            for p in result["players"]:
+                if p["name"] == "f1":
+                    reward = 0.01 * (p["stack"] - initial_stack)  # Linear reward scaled
+                    break
+
             if winner["name"] == "f1":
                 agent_wins += 1
+                if opponent_type == "Random":
+                    random_wins += 1
+                else:
+                    allin_wins += 1
+                outcome = f"Agent won against {opponent_type}"
             else:
                 opponent_wins += 1
+                if opponent_type == "Random":
+                    random_losses += 1
+                else:
+                    allin_losses += 1
+                outcome = f"Agent lost to {opponent_type}"
 
-            # Log and print every 100 games
-            if (game + 1) % 25 == 0:
+            # Evaluate state for logging
+            last_state_key = agent.state_action_history[-1][0] if agent.state_action_history else None
+            hand_strength = "unknown"
+            if last_state_key:
+                hand_strength = last_state_key.split("_")[0]
+
+            action_taken = agent.state_action_history[-1][1] if agent.state_action_history else None
+            was_override = (
+                (hand_strength == "weak" and action_taken == "fold") and random.random() < agent.fold_weak_prob or
+                (hand_strength == "medium" and action_taken == "fold" and random.random() < agent.fold_medium_prob)
+            )
+
+            random_total = random_wins + random_losses
+            allin_total = allin_wins + allin_losses
+            random_rate = 100.0 * random_wins / random_total if random_total else 0.0
+            allin_rate = 100.0 * allin_wins / allin_total if allin_total else 0.0
+
+            # Pretty console output
+            print(f"Opponent Type     : {opponent_type}")
+            print(f"Hand Strength     : {hand_strength}")
+            print(f"Chosen Action     : {action_taken}" + (" (override)" if was_override else ""))
+            print(f"Winner            : {winner['name']}")
+            print(f"Reward this game  : {round(reward, 2)}")
+            print(f"Total Agent Wins  : {agent_wins}")
+            print(f"Total Opponent Wins: {opponent_wins}")
+            print(f"RandomPlayer W/L  : {random_wins}W / {random_losses}L ({random_rate:.2f}%)")
+            print(f"AllInPlayer W/L   : {allin_wins}W / {allin_losses}L ({allin_rate:.2f}%)")
+            print("=" * 30)
+            print("Action counts", agent.action_counts.copy())
+            print(f"[Summary] G{game_id} | {opponent_type} | {hand_strength} | {action_taken}" + 
+                  (" (override)" if was_override else "") + 
+                  f" | reward={reward:.2f} | agent={agent_wins} | opp={opponent_wins} | WR(AllIn)={allin_rate:.2f}%")
+            print("Exploited maniac by folding", agent.exploit_maniac)
+
+            # JSONL file log
+            log_entry = {
+                "game_id": game_id,
+                "opponent": opponent_type,
+                "hand_strength": hand_strength,
+                "action": action_taken,
+                "was_override": was_override,
+                "winner": winner["name"],
+                "reward": reward,
+                "agent_wins": agent_wins,
+                "opponent_wins": opponent_wins,
+                "random_wins": random_wins,
+                "random_losses": random_losses,
+                "allin_wins": allin_wins,
+                "allin_losses": allin_losses,
+                "random_winrate": round(random_rate, 2),
+                "allin_winrate": round(allin_rate, 2),
+                "action_counts": agent.action_counts.copy(),
+                "exploited_maniac": agent.exploit_maniac
+
+            }
+            agent.exploit_maniac = False
+
+            with open(JSONL_LOG_PATH, "a") as logf:
+                logf.write(json.dumps(log_entry) + "\n")
+
+            # Save Q-table + CSV every SAVE_INTERVAL
+            if game_id % SAVE_INTERVAL == 0:
+                with open(QTABLE_PATH, "wb") as f:
+                    pickle.dump(agent.agent.q_table, f)
+                print(f"[Checkpoint] Saved Q-table at game {game_id}")
+
                 total = agent_wins + opponent_wins
                 win_rate = 100.0 * agent_wins / total if total > 0 else 0.0
-                print(f"After {game + 1} games: Agent wins = {agent_wins}, Opponent wins = {opponent_wins}, Win rate = {win_rate:.2f}%")
-                writer.writerow([game + 1, agent_wins, opponent_wins, f"{win_rate:.2f}"])
+                writer.writerow([
+                    game_id,
+                    agent_wins,
+                    opponent_wins,
+                    f"{win_rate:.2f}",
+                    reward,
+                    opponent_type,
+                    outcome
+                ])
 
-    print("\n=== Training Results ===")
-    print(f"Agent wins: {agent_wins}")
-    print(f"Opponent wins: {opponent_wins}")
-    print(f"Win rate: {100.0 * agent_wins / num_game:.2f}%")
-
-    # Save Q-table
-    with open("q_table01.pkl", "wb") as f:
-        pickle.dump(agent.agent.q_table, f)
-
-    print("\nTraining completed. Q-table saved as q_table.pkl!")
-
-    # Print state summaries
-    print("\n=== State Summary ===")
-    print("Hand Strength Counts:")
-    for k, v in agent.agent.hand_strength_counts.items():
-        print(f"{k}: {v}")
-
-    print("\nOpponent Behavior Counts:")
-    for k, v in agent.agent.behavior_counts.items():
-        print(f"{k}: {v}")
-
-    print("\nPot Bucket Counts:")
-    for k, v in agent.agent.pot_bucket_counts.items():
-        print(f"{k}: {v}")
-    avg_raise = sum(agent.agent.raise_ratios) / len(agent.agent.raise_ratios)
-    avg_call = sum(agent.agent.call_ratios) / len(agent.agent.call_ratios)
-
-    print(f"\nAverage Raise Ratio: {avg_raise:.2f}")
-    print(f"Average Call Ratio: {avg_call:.2f}")
-
+    print("\n=== Training Ended ===")
 
 if __name__ == "__main__":
     train_q_agent()

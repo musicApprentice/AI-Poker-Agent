@@ -1,0 +1,37 @@
+=== Game 300 ===
+Opponent Type: AllIn
+Winner: f1
+--- Cumulative Stats ---
+Total Agent Wins: 31, Total Opponent Wins: 69
+RandomPlayer: 3W / 3L
+AllInPlayer : 28W / 66L
+Win Rate vs RandomPlayer: 50.00%
+Win Rate vs AllInPlayer : 29.79%
+Reward this game: 920
+==========================
+
+[Checkpoint] Saved Q-table at game 300
+
+
+
+-- Cumulative Stats ---
+Total Agent Wins: 26, Total Opponent Wins: 74
+RandomPlayer: 3W / 7L
+AllInPlayer : 23W / 67L
+Win Rate vs RandomPlayer: 30.00%
+Win Rate vs AllInPlayer : 25.56%
+Reward this game: -3180
+==========================
+
+[Checkpoint] Saved Q-table at game 400
+=== Game 500 ===
+Opponent Type: AllIn
+Winner: f2
+--- Cumulative Stats ---
+Total Agent Wins: 20, Total Opponent Wins: 80
+RandomPlayer: 5W / 3L
+AllInPlayer : 15W / 77L
+Win Rate vs RandomPlayer: 62.50%
+Win Rate vs AllInPlayer : 16.30%
+Reward this game: -280
+Scaled negative reward -4685.296148590823
