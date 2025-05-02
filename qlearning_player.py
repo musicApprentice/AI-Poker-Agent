@@ -16,6 +16,10 @@ class QLearningPlayer(BasePokerPlayer):
         self.last_state = None
         self.last_action = None
         self.initial_stack = None
+        
+        self.raise_ratios = []
+        self.call_ratios = []
+
 
         # Short-term stats (per round)
         self.opponent_actions = {"raise": 0, "call": 0, "fold": 0, "total": 0}

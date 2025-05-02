@@ -15,6 +15,9 @@ class QLearningPokerAgent:
         self.behavior_counts = defaultdict(int)
         self.pot_bucket_counts = defaultdict(int)
 
+        self.raise_ratios = []
+        self.call_ratios = []
+
     def evaluate_hand_strength(self, hole_card):
         print("Hole card", hole_card)
 
@@ -75,59 +78,73 @@ class QLearningPokerAgent:
         # Get the strength from our evaluate_hand_strength function
         strength = self.evaluate_hand_strength(hole_card)
 
-        # Get the information from the round_state
+        # Extract pot size from game state
         pot_size = round_state["pot"]["main"]["amount"]
-        total_stack = sum(seat["stack"] + seat.get("bet", 0) for seat in round_state["seats"])
-        relative_pot = pot_size / total_stack if total_stack > 0 else 0
 
-        # Dynamically bucket based on relative pot size
-        if relative_pot < 0.1:
+        # NEW: Normalize by big blind (not total stack!)
+       # Normalize to big blind
+        relative_pot = pot_size / 20
+
+        if relative_pot < 2:
             pot_bucket = "very_small"
             print("very small bucket")
-        elif relative_pot < 0.25:
+        elif relative_pot < 4:
             pot_bucket = "small"
             print("small bucket")
-        elif relative_pot < 0.5:
+        elif relative_pot < 8:
             pot_bucket = "medium"
-            print("small medium")
-        elif relative_pot < 0.75:
+            print("medium bucket")
+        elif relative_pot < 16:
             pot_bucket = "large"
             print("large bucket")
         else:
             pot_bucket = "very_large"
             print("very large bucket")
 
+
         self.pot_bucket_counts[pot_bucket] += 1
 
+        # Get current street: preflop, flop, turn, river
         street = round_state["street"]
 
-        # Return the hand_strength, the street, and the amount in the pot
+        # Return formatted abstracted state string
         return f"{strength}_{street}_{pot_bucket}"
+
 
     def abstract_history(self, round_state, opponent_profile=None):
         if opponent_profile is None or opponent_profile.get("total", 0) == 0:
             self.behavior_counts["unknown"] += 1
             return "unknown"
 
-        raise_ratio = opponent_profile["raise"] / opponent_profile["total"]
-        call_ratio = opponent_profile["call"] / opponent_profile["total"]
+        total = opponent_profile["total"]
+        raise_ratio = opponent_profile["raise"] / total
+        call_ratio = opponent_profile["call"] / total
 
+        self.raise_ratios.append(raise_ratio)
+        self.call_ratios.append(call_ratio)
+
+        # New, more realistic thresholds
         if raise_ratio > 0.6:
             print("Behavior: Maniac")
             self.behavior_counts["maniac"] += 1
             return "maniac"
-        elif raise_ratio > 0.3:
-            print("Behavior: Aggressive")
-            self.behavior_counts["aggressive"] += 1
-            return "aggressive"
-        elif call_ratio > 0.5:
+        elif call_ratio > 0.55 and raise_ratio < 0.3:
             print("Behavior: Calling station")
             self.behavior_counts["calling_station"] += 1
             return "calling_station"
+        elif abs(raise_ratio - call_ratio) < 0.2:
+            print("Behavior: Balanced")
+            self.behavior_counts["balanced"] += 1
+            return "balanced"
+        elif raise_ratio > call_ratio:
+            print("Behavior: Aggressive")
+            self.behavior_counts["aggressive"] += 1
+            return "aggressive"
         else:
             print("Behavior: Tight")
             self.behavior_counts["tight"] += 1
             return "tight"
+
 
     def get_state_key(self, hole_card, round_state, opponent_profile=None):
         state = self.abstract_state(hole_card, round_state)
