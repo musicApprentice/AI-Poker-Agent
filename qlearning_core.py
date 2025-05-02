@@ -3,7 +3,7 @@ import pickle
 from collections import defaultdict
 
 class QLearningPokerAgent:
-    def __init__(self, actions, alpha=0.1, gamma=0.9, epsilon=0.1):
+    def __init__(self, actions, alpha=0.1, gamma=0.9, epsilon=0.3):
         self.q_table = {}  # state -> action -> value
         self.alpha = alpha  # learning rate
         self.gamma = gamma  # discount factor
@@ -124,8 +124,7 @@ class QLearningPokerAgent:
         self.call_ratios.append(call_ratio)
 
         # New, more realistic thresholds
-        if raise_ratio > 0.6:
-            # print("Behavior: Maniac")
+        if opponent_profile["total"] >= 2 and opponent_profile["raise"] >= .65 * opponent_profile["total"]:
             self.behavior_counts["maniac"] += 1
             return "maniac"
         elif call_ratio > 0.55 and raise_ratio < 0.3:
@@ -175,6 +174,11 @@ class QLearningPokerAgent:
         max_next_q = max(self.q_table[next_state_key].values())
 
         new_q = (1 - self.alpha) * current_q + self.alpha * (reward + self.gamma * max_next_q)
+        if new_q == current_q:
+            print(f"[NO Q-UPDATE] State: {prev_state_key}, Action: {action}, Q-value unchanged: {new_q}")
+        else:
+            print(f"[Q-UPDATE] State: {prev_state_key}, Action: {action}, Old Q: {current_q:.4f}, New Q: {new_q:.4f}, Reward: {reward}, Max future Q: {max_next_q:.4f}")
+
         self.q_table[prev_state_key][action] = new_q
 
     def save(self, filename):
