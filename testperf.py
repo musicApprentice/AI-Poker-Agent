@@ -4,7 +4,9 @@ import game
 setup_config = game.setup_config
 start_poker = game.start_poker
 import time
+from allin_player import AllInPlayer
 from argparse import ArgumentParser
+from qlearning_player import QLearningPlayer
 
 
 """ =========== *Remember to import your agent!!! =========== """
@@ -20,7 +22,7 @@ $ python testperf.py -n1 "Random Warrior 1" -a1 RandomPlayer -n2 "Random Warrior
 def testperf(agent_name1, agent1, agent_name2, agent2):		
 	
 	# Init to play 500 games of 1000 rounds
-	num_game = 10
+	num_game = 50
 	max_round = 1000
 	initial_stack = 10000
 	smallblind_amount = 20
@@ -33,8 +35,8 @@ def testperf(agent_name1, agent1, agent_name2, agent2):
 	config = setup_config(max_round=max_round, initial_stack=initial_stack, small_blind_amount=smallblind_amount)
 	
 	# Register players
-	config.register_player(name=agent_name1, algorithm=RandomPlayer())
-	config.register_player(name=agent_name2, algorithm=RandomPlayer())
+	config.register_player(name=agent_name1, algorithm=QLearningPlayer())
+	config.register_player(name=agent_name2, algorithm=AllInPlayer())
 	# config.register_player(name=agent_name1, algorithm=agent1())
 	# config.register_player(name=agent_name2, algorithm=agent2())
 	
@@ -45,6 +47,8 @@ def testperf(agent_name1, agent1, agent_name2, agent2):
 		game_result = start_poker(config, verbose=0)
 		agent1_pot = agent1_pot + game_result['players'][0]['stack']
 		agent2_pot = agent2_pot + game_result['players'][1]['stack']
+		print(agent1_pot)
+		print(agent2_pot)
 
 	print("\n After playing {} games of {} rounds, the results are: ".format(num_game, max_round))
 	# print("\n Agent 1's final pot: ", agent1_pot)

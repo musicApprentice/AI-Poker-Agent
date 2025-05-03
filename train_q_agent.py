@@ -1,79 +1,108 @@
+# train_q_agent.py
+
+import os
+import pickle
+import csv
 from pypokerengine.api.game import setup_config, start_poker
 from randomplayer import RandomPlayer
 from qlearning_player import QLearningPlayer
-import pickle
-import csv
+from allin_player import AllInPlayer
+from raise_player import RaisedPlayer
 
-# Modified from 
 def train_q_agent():
-    num_game = 25
+    num_games = 25
     max_round = 100
     initial_stack = 10000
     small_blind_amount = 20
+    switch_interval = 10  # switch opponent every 10 games
 
     agent = QLearningPlayer()
-    opponent = RandomPlayer()
 
-    config = setup_config(max_round=max_round, initial_stack=initial_stack, small_blind_amount=small_blind_amount)
-    config.register_player(name="f1", algorithm=agent)
-    config.register_player(name="f2", algorithm=opponent)
-
+    # overall counters
     agent_wins = 0
     opponent_wins = 0
 
-    # Create CSV file for logging win rate
-    with open("training_progress.csv", mode="w", newline="") as file:
-        writer = csv.writer(file)
-        writer.writerow(["Game", "Agent Wins", "Opponent Wins", "Win Rate (%)"])
+    # per-opponent counters
+    random_games = random_wins = 0
+    allin_games = allin_wins = 0
 
-        for game in range(num_game):
-            print(f"Training game {game+1}/{num_game}")
+    # prepare CSV
+    with open("training_progress.csv", "w", newline="") as csvfile:
+        writer = csv.writer(csvfile)
+        writer.writerow([
+            "Game", "Opponent",
+            "Agent Wins vs This Opponent", "Games vs This Opponent", "Win Rate vs This Opponent (%)",
+            "Total Agent Wins", "Total Games", "Overall Win Rate (%)"
+        ])
+
+        for game in range(1, num_games + 1):
+            # pick opponent
+            block = (game - 1) // switch_interval
+            if block % 2 == 0:
+                opponent = AllInPlayer()
+                opp_name = "AllIn"
+                allin_games += 1
+            else:
+                opponent = AllInPlayer()
+                opp_name = "AllIn"
+                allin_games += 1
+
+            # build fresh config
+            config = setup_config(
+                max_round=max_round,
+                initial_stack=initial_stack,
+                small_blind_amount=small_blind_amount
+            )
+            config.register_player(name="f1", algorithm=agent)
+            config.register_player(name="f2", algorithm=opponent)
+
+            # play
+            print(f"Game {game}/{num_games} vs {opp_name}")
             result = start_poker(config, verbose=0)
-
-            # Find out who won this game
             winner = max(result["players"], key=lambda p: p["stack"])
+
+            # tally
             if winner["name"] == "f1":
                 agent_wins += 1
+                if opp_name == "Random":
+                    random_wins += 1
+                else:
+                    allin_wins += 1
             else:
                 opponent_wins += 1
 
-            # Log and print every 100 games
-            if (game + 1) % 25 == 0:
-                total = agent_wins + opponent_wins
-                win_rate = 100.0 * agent_wins / total if total > 0 else 0.0
-                print(f"After {game + 1} games: Agent wins = {agent_wins}, Opponent wins = {opponent_wins}, Win rate = {win_rate:.2f}%")
-                writer.writerow([game + 1, agent_wins, opponent_wins, f"{win_rate:.2f}"])
+            # compute rates
+            total_games = agent_wins + opponent_wins
+            overall_win_rate = 100 * agent_wins / total_games if total_games else 0.0
+            random_rate = 100 * random_wins / random_games if random_games else 0.0
+            allin_rate  = 100 * allin_wins  / allin_games  if allin_games  else 0.0
 
-    print("\n=== Training Results ===")
-    print(f"Agent wins: {agent_wins}")
-    print(f"Opponent wins: {opponent_wins}")
-    print(f"Win rate: {100.0 * agent_wins / num_game:.2f}%")
+            # log
+            writer.writerow([
+                game, opp_name,
+                random_wins if opp_name=="Random" else allin_wins,
+                random_games if opp_name=="Random" else allin_games,
+                f"{(random_rate if opp_name=='Random' else allin_rate):.2f}",
+                agent_wins, total_games, f"{overall_win_rate:.2f}"
+            ])
 
-    # Save Q-table
+            # print summary every switch_interval
+            if game % switch_interval == 0:
+                print(f" After {game} games:")
+                print(f"   vs Random:   {random_wins}/{random_games}  ({random_rate:.2f}%)")
+                print(f"   vs AllIn:    {allin_wins}/{allin_games}   ({allin_rate:.2f}%)")
+                print(f"   Overall:     {agent_wins}/{total_games}  ({overall_win_rate:.2f}%)\n")
+
+    # final summary
+    print("=== Final Training Results ===")
+    print(f" vs Random:   {random_wins}/{random_games}  ({random_rate:.2f}%)")
+    print(f" vs AllIn:    {allin_wins}/{allin_games}   ({allin_rate:.2f}%)")
+    print(f" Overall:     {agent_wins}/{num_games}  ({100 * agent_wins / num_games:.2f}%)")
+
+    # save Q-table
     with open("q_table01.pkl", "wb") as f:
         pickle.dump(agent.agent.q_table, f)
-
-    print("\nTraining completed. Q-table saved as q_table.pkl!")
-
-    # Print state summaries
-    print("\n=== State Summary ===")
-    print("Hand Strength Counts:")
-    for k, v in agent.agent.hand_strength_counts.items():
-        print(f"{k}: {v}")
-
-    print("\nOpponent Behavior Counts:")
-    for k, v in agent.agent.behavior_counts.items():
-        print(f"{k}: {v}")
-
-    print("\nPot Bucket Counts:")
-    for k, v in agent.agent.pot_bucket_counts.items():
-        print(f"{k}: {v}")
-    avg_raise = sum(agent.agent.raise_ratios) / len(agent.agent.raise_ratios)
-    avg_call = sum(agent.agent.call_ratios) / len(agent.agent.call_ratios)
-
-    print(f"\nAverage Raise Ratio: {avg_raise:.2f}")
-    print(f"Average Call Ratio: {avg_call:.2f}")
-
+    print("Saved final Q-table to q_table01.pkl")
 
 if __name__ == "__main__":
     train_q_agent()
