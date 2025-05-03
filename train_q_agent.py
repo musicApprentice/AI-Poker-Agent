@@ -10,7 +10,7 @@ from allin_player import AllInPlayer
 from raise_player import RaisedPlayer
 
 def train_q_agent():
-    num_games = 25
+    num_games = 50
     max_round = 100
     initial_stack = 10000
     small_blind_amount = 20
