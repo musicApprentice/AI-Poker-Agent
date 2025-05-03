@@ -4,13 +4,14 @@ import pickle
 import csv
 
 def train_q_agent_self_play():
-    num_game = 100
+    num_game = 1000
     max_round = 100
     initial_stack = 10000
     small_blind_amount = 20
 
-    agent = QLearningPlayer(trainable=True)         # this one trains
-    opponent = QLearningPlayer(trainable=False)     # this one does not
+    agent = QLearningPlayer(trainable=True)
+    opponent = QLearningPlayer(trainable=False, q_table_path="q_table_frozen.pkl")
+
 
     config = setup_config(max_round=max_round, initial_stack=initial_stack, small_blind_amount=small_blind_amount)
     config.register_player(name="f1", algorithm=agent)
@@ -36,7 +37,7 @@ def train_q_agent_self_play():
     with open("q_table_selfplay.pkl", "wb") as f:
         pickle.dump(agent.agent.q_table, f)
 
-    print("\n✅ Self-play training complete.")
+    print("\n Self-play training complete.")
     print(f"Final win rate: {100.0 * agent_wins / num_game:.2f}%")
 
 if __name__ == "__main__":
